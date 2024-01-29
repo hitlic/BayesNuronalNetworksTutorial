@@ -4,21 +4,52 @@ from torch.nn import functional as F
 from matplotlib import pyplot as plt
 
 
-def evaluate(model, val_dl, sample_num):
-    """验证，输出验证集上的正确率"""
+def evaluate_bbb(model, val_dl, sample_num):
+    """
+    BBB模型的性能评价，返回正确率
+    Args:
+    model:      模型
+    val_dl:     Dataloader
+    sample_num: 每个样本采样次数
+    """
     model.eval()
     total_num = 0  # 样本总数
     right_num = 0  # 预测正确的样本数量
-    for batch_x, batch_y in val_dl:
-        preds = model(batch_x, sample_num)
-        preds = torch.stack(preds, dim=-1).mean(dim=-1)  # 多次采样取均值
-        right_num += (preds.argmax(dim=1) == batch_y).sum()
-        total_num += len(batch_y)
+    with torch.no_grad():
+        for batch_x, batch_y in val_dl:
+            preds = model(batch_x, sample_num)
+            preds = torch.stack(preds, dim=-1).mean(dim=-1)  # 多次采样取均值
+            right_num += (preds.argmax(dim=1) == batch_y).sum()
+            total_num += len(batch_y)
+    return right_num.item() / total_num
+
+
+def evaluate_mcdropout(model, val_dl, sample_num):
+    """
+    MCDropout模型的性能评价，返回正确率
+    Args:
+        model:      模型
+        val_dl:     Dataloader
+        sample_num: 每个样本采样次数
+    """
+    model.eval()
+    total_num = 0  # 样本总数
+    right_num = 0  # 预测正确的样本数量
+    with torch.no_grad():
+        for batch_x, batch_y in val_dl:
+            preds = [model(batch_x) for _ in range(sample_num)]
+            preds = torch.stack(preds, dim=-1).mean(dim=-1)  # 多次采样取均值
+            right_num += (preds.argmax(dim=1) == batch_y).sum()
+            total_num += len(batch_y)
     return right_num.item() / total_num
 
 
 def rotate(img, angle=30):
-    """旋转图像"""
+    """旋转图像
+    Args:
+        img: [channel, width, height]
+        argle: 间隔旋转度数，共360/angle副图像
+    """
     img = img.unsqueeze(0)
     rotation_list = range(0, 360, angle)
     image_list = []
@@ -32,6 +63,13 @@ def rotate(img, angle=30):
 
 
 def grid_show_imgs(imgs, rows=2, gray=True, infos=None):
+    """
+    Args:
+        imgs: 图像列表
+        rows: 行数
+        gray: 是否黑白显示
+        infos: 作为标题显示的信息，空值或与imgs长度相同的列表
+    """
     plt.figure(figsize=(24, 6))
     if infos is not None:
         assert len(imgs == len(infos))
@@ -42,17 +80,3 @@ def grid_show_imgs(imgs, rows=2, gray=True, infos=None):
             plt.gca().set_title(infos[i], size=14)
         plt.imshow(img[0, :, :].data.cpu().numpy(), cmap='gray' if gray else 'viridis')
     plt.show()
-
-
-if __name__ == '__main__':
-    from torchvision.datasets import MNIST
-    from torchvision.transforms import ToTensor
-    import random
-
-    data_dir = '~/datasets'
-
-    test_ds = MNIST(data_dir, train=False, download=True, transform=ToTensor())
-    img = random.choice(test_ds)
-
-    imgs = rotate(img[0])
-    grid_show_imgs(imgs, infos=[f'{i}' for i in range(len(imgs))])

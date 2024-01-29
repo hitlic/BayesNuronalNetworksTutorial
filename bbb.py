@@ -6,8 +6,14 @@ import math
 
 
 class Prior:
-    """先验分布"""
+    """先验分布（式38）"""
     def __init__(self, sigma1=1, sigma2=0.00001, pi=0.5):
+        """
+        Args:
+            sigma1: 式38中的sigma1
+            sigma2: 式38中的sigma2
+            pi:     式38中的pi
+        """
         self.normal1 = Normal(0, sigma1)
         self.normal2 = Normal(0, sigma2)
         self.pi = pi
@@ -41,9 +47,11 @@ class VariationalPoster:
 
 
 class BayesLinear(nn.Module):
+    """
+    贝叶斯全连接层
+    """
     def __init__(self, in_features, out_features, prior):
         """
-        贝叶斯神经网络的一层。
         Args:
             in_features:  输入维度
             out_features: 输出维度
@@ -66,6 +74,7 @@ class BayesLinear(nn.Module):
         self.b_variational_post = VariationalPoster()
 
     def sample_weight(self):
+        """从变分后验中采样全连接层的权值矩阵和偏置向量"""
         W = self.W_variational_post.sample(self.W_mu, self.W_rho)                   # 算法2：第6行
         b = self.b_variational_post.sample(self.b_mu, self.b_rho)                   # 算法2：第6行
         return W, b
@@ -74,11 +83,11 @@ class BayesLinear(nn.Module):
         W, b = self.sample_weight()  # 采样权值矩阵和偏差向量
         outputs = F.linear(inputs, W.to(inputs.device), b.to(inputs.device))  # Wx + b
 
-        # 预测
+        # --预测
         if not train:
             return outputs, 0, 0
 
-        # 训练
+        # --训练
         # 对数先验
         log_prior = self.prior.log_prob(W).sum() + self.prior.log_prob(b).sum()      # 算法2：第7行
         # 对数变分后验
@@ -87,6 +96,9 @@ class BayesLinear(nn.Module):
 
 
 class BayesMLP(nn.Module):
+    """
+    贝叶斯MLP模型
+    """
     def __init__(self, in_dim, out_dim, hidden_dims, sigma1=1, sigma2=0.00001, pi=0.5, activate='none'):
         super().__init__()
         prior = Prior(sigma1, sigma2, pi)
@@ -104,6 +116,7 @@ class BayesMLP(nn.Module):
         self.flatten = nn.Flatten()
 
     def run_sample(self, inputs, train):
+        """执行一次采样，返回模型预测结果、对数先验和对数变分后验"""
         if len(inputs.shape) >= 3:  # 样本是矩阵而不是向量的情况（例如图像）
             inputs = self.flatten(inputs)
         log_prior, log_va_poster = 0, 0  # 对数先验，对数变分后验
@@ -116,6 +129,11 @@ class BayesMLP(nn.Module):
         return model_preds, log_prior, log_va_poster
 
     def forward(self, inputs, sample_num):
+        """
+        Args:
+            inputs: 模型输入
+            sample: 采样次数（式29中的m）
+        """
         log_prior_s = 0
         log_va_poser_s = 0
         model_preds_s = []
@@ -135,7 +153,7 @@ class BayesMLP(nn.Module):
 
 class RegressionELBOLoss(nn.Module):
     """
-    用于回归问题的损失
+    用于回归问题的ELBO损失
     """
     def __init__(self, batch_num, noise_tol=0.1):
         super().__init__()
@@ -153,6 +171,9 @@ class RegressionELBOLoss(nn.Module):
 
 
 class ClassificationELBOLoss(nn.Module):
+    """
+    用于分类任务的ELBO损失
+    """
     def __init__(self, batch_num):
         super().__init__()
         self.batch_num = batch_num
